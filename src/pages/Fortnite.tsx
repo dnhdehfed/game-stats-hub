@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Target,
   Trophy,
@@ -8,70 +8,77 @@ import {
   User,
   Swords,
   Crown,
+  AlertCircle,
 } from "lucide-react";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import SearchBar from "@/components/shared/SearchBar";
 import StatCard from "@/components/shared/StatCard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-
-// Mock data for demonstration
-const mockPlayerStats = {
-  username: "NinjaFortnite",
-  level: 250,
-  stats: {
-    wins: 1234,
-    kills: 45678,
-    deaths: 12345,
-    kd: 3.7,
-    winRate: 15.2,
-    matchesPlayed: 8123,
-    minutesPlayed: 98765,
-    top10: 3456,
-    top25: 5678,
-  },
-};
-
-const mockItemShop = [
-  { id: 1, name: "Galaxy Skin", type: "Outfit", rarity: "Legendary", price: 2000 },
-  { id: 2, name: "Star Wand", type: "Pickaxe", rarity: "Rare", price: 800 },
-  { id: 3, name: "Slurp Juice", type: "Back Bling", rarity: "Epic", price: 1200 },
-  { id: 4, name: "Floss", type: "Emote", rarity: "Rare", price: 500 },
-  { id: 5, name: "Renegade Raider", type: "Outfit", rarity: "Rare", price: 1200 },
-  { id: 6, name: "Mako Glider", type: "Glider", rarity: "Rare", price: 500 },
-];
-
-const mockLocker = [
-  { id: 1, name: "Skull Trooper", type: "Outfit", rarity: "Epic" },
-  { id: 2, name: "Reaper", type: "Pickaxe", rarity: "Epic" },
-  { id: 3, name: "Black Knight", type: "Outfit", rarity: "Legendary" },
-  { id: 4, name: "The Worm", type: "Emote", rarity: "Rare" },
-];
+import { fortniteApi, FortnitePlayerStats } from "@/lib/api/fortnite";
+import { useToast } from "@/hooks/use-toast";
 
 const Fortnite = () => {
-  const [searchedPlayer, setSearchedPlayer] = useState<string | null>(null);
+  const [playerData, setPlayerData] = useState<FortnitePlayerStats | null>(null);
+  const [shopData, setShopData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isShopLoading, setIsShopLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { toast } = useToast();
 
-  const handleSearch = (query: string) => {
+  // Load item shop on mount
+  useEffect(() => {
+    const loadShop = async () => {
+      setIsShopLoading(true);
+      const result = await fortniteApi.getItemShop();
+      if (result.success && result.data) {
+        setShopData(result.data);
+      }
+      setIsShopLoading(false);
+    };
+    loadShop();
+  }, []);
+
+  const handleSearch = async (query: string) => {
     setIsLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      setSearchedPlayer(query);
-      setIsLoading(false);
-    }, 1000);
+    setError(null);
+    setPlayerData(null);
+
+    const result = await fortniteApi.getPlayerStats(query);
+    
+    if (result.success && result.data) {
+      setPlayerData(result.data);
+    } else {
+      setError(result.error || "Player not found");
+      toast({
+        title: "Error",
+        description: result.error || "Player not found. Make sure the username is correct.",
+        variant: "destructive",
+      });
+    }
+    
+    setIsLoading(false);
   };
 
   const getRarityColor = (rarity: string) => {
-    switch (rarity.toLowerCase()) {
+    switch (rarity?.toLowerCase()) {
       case "legendary":
         return "text-yellow-400 bg-yellow-400/10 border-yellow-400/30";
       case "epic":
         return "text-purple-400 bg-purple-400/10 border-purple-400/30";
       case "rare":
         return "text-blue-400 bg-blue-400/10 border-blue-400/30";
+      case "uncommon":
+        return "text-green-400 bg-green-400/10 border-green-400/30";
       default:
         return "text-gray-400 bg-gray-400/10 border-gray-400/30";
     }
+  };
+
+  const formatNumber = (num: number) => {
+    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+    if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+    return num?.toString() || "0";
   };
 
   return (
@@ -90,12 +97,12 @@ const Fortnite = () => {
                 <span className="text-gradient-fortnite">FORTNITE</span> STATS
               </h1>
               <p className="text-muted-foreground mb-8">
-                Search for any player to view their stats, K/D ratio, wins, and more
+                Search for any player to view their real stats, K/D ratio, wins, and more
               </p>
 
               <div className="flex justify-center">
                 <SearchBar
-                  placeholder="Enter Fortnite username..."
+                  placeholder="Enter Fortnite username (Epic Games)..."
                   onSearch={handleSearch}
                   variant="fortnite"
                   buttonText="Track Player"
@@ -109,15 +116,12 @@ const Fortnite = () => {
         <section className="py-8">
           <div className="container mx-auto px-4">
             <Tabs defaultValue="stats" className="w-full">
-              <TabsList className="grid w-full max-w-md mx-auto grid-cols-3 mb-8 bg-secondary/50">
+              <TabsList className="grid w-full max-w-md mx-auto grid-cols-2 mb-8 bg-secondary/50">
                 <TabsTrigger value="stats" className="font-gaming text-sm">
                   PLAYER STATS
                 </TabsTrigger>
                 <TabsTrigger value="shop" className="font-gaming text-sm">
                   ITEM SHOP
-                </TabsTrigger>
-                <TabsTrigger value="locker" className="font-gaming text-sm">
-                  LOCKER
                 </TabsTrigger>
               </TabsList>
 
@@ -127,7 +131,17 @@ const Fortnite = () => {
                     <div className="w-12 h-12 border-4 border-fortnite-blue/30 border-t-fortnite-blue rounded-full animate-spin mx-auto mb-4" />
                     <p className="text-muted-foreground">Loading stats...</p>
                   </div>
-                ) : searchedPlayer ? (
+                ) : error ? (
+                  <div className="text-center py-16">
+                    <AlertCircle className="w-16 h-16 text-destructive mx-auto mb-4" />
+                    <h3 className="font-gaming text-xl text-destructive mb-2">
+                      PLAYER NOT FOUND
+                    </h3>
+                    <p className="text-muted-foreground/70">
+                      {error}. Make sure stats are set to public.
+                    </p>
+                  </div>
+                ) : playerData ? (
                   <>
                     {/* Player Header */}
                     <div className="glass-card rounded-2xl p-6 max-w-4xl mx-auto">
@@ -137,10 +151,10 @@ const Fortnite = () => {
                         </div>
                         <div>
                           <h2 className="font-gaming text-2xl">
-                            {mockPlayerStats.username}
+                            {playerData.account?.name}
                           </h2>
                           <p className="text-muted-foreground">
-                            Level {mockPlayerStats.level}
+                            Battle Pass Level {playerData.battlePass?.level || 0}
                           </p>
                         </div>
                       </div>
@@ -149,49 +163,49 @@ const Fortnite = () => {
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <StatCard
                           label="Wins"
-                          value={mockPlayerStats.stats.wins.toLocaleString()}
+                          value={formatNumber(playerData.stats?.all?.overall?.wins || 0)}
                           icon={Trophy}
                           variant="fortnite"
                         />
                         <StatCard
                           label="K/D Ratio"
-                          value={mockPlayerStats.stats.kd}
+                          value={(playerData.stats?.all?.overall?.kd || 0).toFixed(2)}
                           icon={Target}
                           variant="fortnite"
                         />
                         <StatCard
                           label="Total Kills"
-                          value={mockPlayerStats.stats.kills.toLocaleString()}
+                          value={formatNumber(playerData.stats?.all?.overall?.kills || 0)}
                           icon={Skull}
                           variant="fortnite"
                         />
                         <StatCard
                           label="Win Rate"
-                          value={`${mockPlayerStats.stats.winRate}%`}
+                          value={`${(playerData.stats?.all?.overall?.winRate || 0).toFixed(1)}%`}
                           icon={Crown}
                           variant="fortnite"
                         />
                         <StatCard
                           label="Matches Played"
-                          value={mockPlayerStats.stats.matchesPlayed.toLocaleString()}
+                          value={formatNumber(playerData.stats?.all?.overall?.matches || 0)}
                           icon={Swords}
                           variant="fortnite"
                         />
                         <StatCard
                           label="Top 10"
-                          value={mockPlayerStats.stats.top10.toLocaleString()}
+                          value={formatNumber(playerData.stats?.all?.overall?.top10 || 0)}
                           icon={Trophy}
                           variant="fortnite"
                         />
                         <StatCard
                           label="Top 25"
-                          value={mockPlayerStats.stats.top25.toLocaleString()}
+                          value={formatNumber(playerData.stats?.all?.overall?.top25 || 0)}
                           icon={Trophy}
                           variant="fortnite"
                         />
                         <StatCard
                           label="Time Played"
-                          value={`${Math.floor(mockPlayerStats.stats.minutesPlayed / 60)}h`}
+                          value={`${Math.floor((playerData.stats?.all?.overall?.minutesPlayed || 0) / 60)}h`}
                           icon={Clock}
                           variant="fortnite"
                         />
@@ -205,91 +219,122 @@ const Fortnite = () => {
                       NO PLAYER SELECTED
                     </h3>
                     <p className="text-muted-foreground/70">
-                      Search for a player above to view their stats
+                      Search for a player above to view their real stats
                     </p>
                   </div>
                 )}
               </TabsContent>
 
               <TabsContent value="shop" className="space-y-8">
-                <div className="max-w-4xl mx-auto">
+                <div className="max-w-6xl mx-auto">
                   <div className="flex items-center gap-3 mb-6">
                     <ShoppingCart className="w-6 h-6 text-fortnite-blue" />
                     <h2 className="font-gaming text-2xl">TODAY'S ITEM SHOP</h2>
                   </div>
 
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    {mockItemShop.map((item) => (
-                      <div
-                        key={item.id}
-                        className={`glass-card rounded-xl p-4 border ${getRarityColor(item.rarity)} transition-all duration-300 hover:scale-105`}
-                      >
-                        <div className="aspect-square rounded-lg bg-secondary/50 mb-3 flex items-center justify-center">
-                          <ShoppingCart className="w-12 h-12 text-muted-foreground/30" />
-                        </div>
-                        <h3 className="font-gaming text-sm mb-1">{item.name}</h3>
-                        <p className="text-xs text-muted-foreground mb-2">
-                          {item.type}
-                        </p>
-                        <div className="flex items-center justify-between">
-                          <span
-                            className={`text-xs font-medium px-2 py-1 rounded ${getRarityColor(item.rarity)}`}
-                          >
-                            {item.rarity}
-                          </span>
-                          <span className="font-gaming text-sm text-fortnite-blue">
-                            {item.price} V
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="locker" className="space-y-8">
-                {searchedPlayer ? (
-                  <div className="max-w-4xl mx-auto">
-                    <div className="flex items-center gap-3 mb-6">
-                      <User className="w-6 h-6 text-fortnite-blue" />
-                      <h2 className="font-gaming text-2xl">
-                        {mockPlayerStats.username}'S LOCKER
-                      </h2>
+                  {isShopLoading ? (
+                    <div className="text-center py-16">
+                      <div className="w-12 h-12 border-4 border-fortnite-blue/30 border-t-fortnite-blue rounded-full animate-spin mx-auto mb-4" />
+                      <p className="text-muted-foreground">Loading item shop...</p>
                     </div>
-
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      {mockLocker.map((item) => (
-                        <div
-                          key={item.id}
-                          className={`glass-card rounded-xl p-4 border ${getRarityColor(item.rarity)} transition-all duration-300 hover:scale-105`}
-                        >
-                          <div className="aspect-square rounded-lg bg-secondary/50 mb-3 flex items-center justify-center">
-                            <User className="w-12 h-12 text-muted-foreground/30" />
+                  ) : shopData?.featured?.entries || shopData?.daily?.entries ? (
+                    <div className="space-y-8">
+                      {/* Featured Items */}
+                      {shopData.featured?.entries && (
+                        <div>
+                          <h3 className="font-gaming text-lg mb-4 text-fortnite-blue">FEATURED</h3>
+                          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                            {shopData.featured.entries.slice(0, 12).map((entry: any) => (
+                              <div
+                                key={entry.offerId}
+                                className={`glass-card rounded-xl p-3 border ${getRarityColor(entry.items?.[0]?.rarity?.value)} transition-all duration-300 hover:scale-105`}
+                              >
+                                <div className="aspect-square rounded-lg bg-secondary/50 mb-2 overflow-hidden">
+                                  {entry.items?.[0]?.images?.icon ? (
+                                    <img
+                                      src={entry.items[0].images.icon}
+                                      alt={entry.items[0].name}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center">
+                                      <ShoppingCart className="w-8 h-8 text-muted-foreground/30" />
+                                    </div>
+                                  )}
+                                </div>
+                                <h4 className="font-medium text-xs mb-1 truncate">
+                                  {entry.items?.[0]?.name || "Unknown"}
+                                </h4>
+                                <div className="flex items-center justify-between">
+                                  <span
+                                    className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${getRarityColor(entry.items?.[0]?.rarity?.value)}`}
+                                  >
+                                    {entry.items?.[0]?.rarity?.displayValue || "Common"}
+                                  </span>
+                                  <span className="font-gaming text-xs text-fortnite-blue">
+                                    {entry.finalPrice} V
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
                           </div>
-                          <h3 className="font-gaming text-sm mb-1">{item.name}</h3>
-                          <p className="text-xs text-muted-foreground mb-2">
-                            {item.type}
-                          </p>
-                          <span
-                            className={`text-xs font-medium px-2 py-1 rounded ${getRarityColor(item.rarity)}`}
-                          >
-                            {item.rarity}
-                          </span>
                         </div>
-                      ))}
+                      )}
+
+                      {/* Daily Items */}
+                      {shopData.daily?.entries && (
+                        <div>
+                          <h3 className="font-gaming text-lg mb-4 text-fortnite-purple">DAILY</h3>
+                          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                            {shopData.daily.entries.slice(0, 12).map((entry: any) => (
+                              <div
+                                key={entry.offerId}
+                                className={`glass-card rounded-xl p-3 border ${getRarityColor(entry.items?.[0]?.rarity?.value)} transition-all duration-300 hover:scale-105`}
+                              >
+                                <div className="aspect-square rounded-lg bg-secondary/50 mb-2 overflow-hidden">
+                                  {entry.items?.[0]?.images?.icon ? (
+                                    <img
+                                      src={entry.items[0].images.icon}
+                                      alt={entry.items[0].name}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center">
+                                      <ShoppingCart className="w-8 h-8 text-muted-foreground/30" />
+                                    </div>
+                                  )}
+                                </div>
+                                <h4 className="font-medium text-xs mb-1 truncate">
+                                  {entry.items?.[0]?.name || "Unknown"}
+                                </h4>
+                                <div className="flex items-center justify-between">
+                                  <span
+                                    className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${getRarityColor(entry.items?.[0]?.rarity?.value)}`}
+                                  >
+                                    {entry.items?.[0]?.rarity?.displayValue || "Common"}
+                                  </span>
+                                  <span className="font-gaming text-xs text-fortnite-blue">
+                                    {entry.finalPrice} V
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ) : (
-                  <div className="text-center py-16">
-                    <User className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
-                    <h3 className="font-gaming text-xl text-muted-foreground mb-2">
-                      SEARCH FOR A PLAYER
-                    </h3>
-                    <p className="text-muted-foreground/70">
-                      Enter a username to view their locker
-                    </p>
-                  </div>
-                )}
+                  ) : (
+                    <div className="text-center py-16">
+                      <ShoppingCart className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
+                      <h3 className="font-gaming text-xl text-muted-foreground mb-2">
+                        SHOP UNAVAILABLE
+                      </h3>
+                      <p className="text-muted-foreground/70">
+                        Unable to load the item shop at this time
+                      </p>
+                    </div>
+                  )}
+                </div>
               </TabsContent>
             </Tabs>
           </div>

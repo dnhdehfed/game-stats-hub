@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Users,
   TrendingUp,
@@ -9,6 +9,7 @@ import {
   Eye,
   ThumbsUp,
   Search,
+  AlertCircle,
 } from "lucide-react";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
@@ -16,111 +17,87 @@ import SearchBar from "@/components/shared/SearchBar";
 import StatCard from "@/components/shared/StatCard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-
-// Mock data
-const mockUserStats = {
-  username: "builderman",
-  displayName: "Builderman",
-  rap: 125000,
-  value: 150000,
-  friends: 9999,
-  followers: 1500000,
-  following: 50,
-  accountAge: "18 years",
-};
-
-const mockInventory = [
-  { id: 1, name: "Dominus Empyreus", type: "Hat", rap: 50000, value: 75000 },
-  { id: 2, name: "Valkyrie Helm", type: "Hat", rap: 25000, value: 30000 },
-  { id: 3, name: "Clockwork's Shades", type: "Face", rap: 15000, value: 18000 },
-  { id: 4, name: "Sparkle Time Fedora", type: "Hat", rap: 8000, value: 10000 },
-];
-
-const mockPopularGames = [
-  {
-    id: 1,
-    name: "Adopt Me!",
-    visits: "32.5B",
-    playing: "425K",
-    likes: "15.2M",
-    genre: "Roleplay",
-  },
-  {
-    id: 2,
-    name: "Brookhaven",
-    visits: "28.1B",
-    playing: "380K",
-    likes: "12.8M",
-    genre: "Town & City",
-  },
-  {
-    id: 3,
-    name: "Tower of Hell",
-    visits: "22.7B",
-    playing: "195K",
-    likes: "8.5M",
-    genre: "Obby",
-  },
-  {
-    id: 4,
-    name: "Murder Mystery 2",
-    visits: "5.8B",
-    playing: "85K",
-    likes: "4.2M",
-    genre: "Horror",
-  },
-  {
-    id: 5,
-    name: "Blox Fruits",
-    visits: "42.3B",
-    playing: "520K",
-    likes: "18.1M",
-    genre: "Adventure",
-  },
-  {
-    id: 6,
-    name: "Pet Simulator X",
-    visits: "12.4B",
-    playing: "145K",
-    likes: "6.3M",
-    genre: "Simulator",
-  },
-];
-
-const mockGameStats = {
-  name: "Sample Game",
-  visits: "1.2B",
-  playing: "15.4K",
-  favorites: "2.1M",
-  likes: "890K",
-  dislikes: "45K",
-  created: "Jan 1, 2020",
-  updated: "Feb 1, 2025",
-};
+import { robloxApi, RobloxUser, RobloxGame } from "@/lib/api/roblox";
+import { useToast } from "@/hooks/use-toast";
 
 const Roblox = () => {
-  const [searchedUser, setSearchedUser] = useState<string | null>(null);
-  const [searchedGame, setSearchedGame] = useState<string | null>(null);
+  const [userData, setUserData] = useState<RobloxUser | null>(null);
+  const [gameData, setGameData] = useState<RobloxGame | null>(null);
+  const [popularGames, setPopularGames] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isPopularLoading, setIsPopularLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [gameSearch, setGameSearch] = useState("");
+  const { toast } = useToast();
 
-  const handleUserSearch = (query: string) => {
+  // Load popular games on mount
+  useEffect(() => {
+    const loadPopular = async () => {
+      setIsPopularLoading(true);
+      const result = await robloxApi.getPopularGames();
+      if (result.success && result.data) {
+        setPopularGames(result.data);
+      }
+      setIsPopularLoading(false);
+    };
+    loadPopular();
+  }, []);
+
+  const handleUserSearch = async (query: string) => {
     setIsLoading(true);
-    setTimeout(() => {
-      setSearchedUser(query);
-      setIsLoading(false);
-    }, 1000);
+    setError(null);
+    setUserData(null);
+
+    const result = await robloxApi.getUser(query);
+
+    if (result.success && result.data) {
+      setUserData(result.data);
+    } else {
+      setError(result.error || "User not found");
+      toast({
+        title: "Error",
+        description: result.error || "User not found",
+        variant: "destructive",
+      });
+    }
+
+    setIsLoading(false);
   };
 
-  const handleGameSearch = (e: React.FormEvent) => {
+  const handleGameSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (gameSearch.trim()) {
-      setIsLoading(true);
-      setTimeout(() => {
-        setSearchedGame(gameSearch);
-        setIsLoading(false);
-      }, 1000);
+    if (!gameSearch.trim()) return;
+
+    setIsLoading(true);
+    setError(null);
+    setGameData(null);
+
+    const result = await robloxApi.getGame(gameSearch);
+
+    if (result.success && result.data) {
+      setGameData(result.data);
+    } else {
+      setError(result.error || "Game not found");
+      toast({
+        title: "Error",
+        description: result.error || "Game not found",
+        variant: "destructive",
+      });
     }
+
+    setIsLoading(false);
+  };
+
+  const formatNumber = (num: number) => {
+    if (num >= 1000000000) return `${(num / 1000000000).toFixed(1)}B`;
+    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+    if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+    return num?.toString() || "0";
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
   };
 
   return (
@@ -139,7 +116,7 @@ const Roblox = () => {
                 <span className="text-gradient-roblox">ROBLOX</span> ANALYTICS
               </h1>
               <p className="text-muted-foreground mb-8">
-                Track user RAP, inventory values, game analytics, and discover popular games
+                Track real user RAP, inventory values, game analytics, and discover popular games
               </p>
 
               <div className="flex justify-center">
@@ -176,7 +153,15 @@ const Roblox = () => {
                     <div className="w-12 h-12 border-4 border-roblox-red/30 border-t-roblox-red rounded-full animate-spin mx-auto mb-4" />
                     <p className="text-muted-foreground">Loading user data...</p>
                   </div>
-                ) : searchedUser ? (
+                ) : error && !userData ? (
+                  <div className="text-center py-16">
+                    <AlertCircle className="w-16 h-16 text-destructive mx-auto mb-4" />
+                    <h3 className="font-gaming text-xl text-destructive mb-2">
+                      USER NOT FOUND
+                    </h3>
+                    <p className="text-muted-foreground/70">{error}</p>
+                  </div>
+                ) : userData ? (
                   <>
                     {/* User Header */}
                     <div className="glass-card rounded-2xl p-6 max-w-4xl mx-auto">
@@ -185,83 +170,76 @@ const Roblox = () => {
                           <Users className="w-8 h-8 text-white" />
                         </div>
                         <div>
-                          <h2 className="font-gaming text-2xl">
-                            {mockUserStats.displayName}
-                          </h2>
+                          <h2 className="font-gaming text-2xl">{userData.displayName}</h2>
                           <p className="text-muted-foreground">
-                            @{mockUserStats.username} • {mockUserStats.accountAge}
+                            @{userData.username} • Joined {formatDate(userData.created)}
                           </p>
                         </div>
                       </div>
+
+                      {userData.description && (
+                        <p className="text-muted-foreground text-sm mb-6 max-w-2xl">
+                          {userData.description.slice(0, 200)}
+                          {userData.description.length > 200 ? "..." : ""}
+                        </p>
+                      )}
 
                       {/* Stats Grid */}
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
                         <StatCard
                           label="RAP"
-                          value={`R$${mockUserStats.rap.toLocaleString()}`}
+                          value={`R$${formatNumber(userData.rap)}`}
                           icon={DollarSign}
                           variant="roblox"
                         />
                         <StatCard
-                          label="Value"
-                          value={`R$${mockUserStats.value.toLocaleString()}`}
-                          icon={TrendingUp}
+                          label="Followers"
+                          value={formatNumber(userData.followers)}
+                          icon={Users}
                           variant="roblox"
                         />
                         <StatCard
-                          label="Followers"
-                          value={mockUserStats.followers.toLocaleString()}
+                          label="Following"
+                          value={formatNumber(userData.following)}
                           icon={Users}
                           variant="roblox"
                         />
                         <StatCard
                           label="Friends"
-                          value={mockUserStats.friends.toLocaleString()}
+                          value={formatNumber(userData.friends)}
                           icon={Users}
                           variant="roblox"
                         />
                       </div>
 
                       {/* Inventory */}
-                      <div>
-                        <div className="flex items-center gap-3 mb-4">
-                          <Package className="w-5 h-5 text-roblox-red" />
-                          <h3 className="font-gaming text-lg">INVENTORY</h3>
-                        </div>
+                      {userData.inventory && userData.inventory.length > 0 && (
+                        <div>
+                          <div className="flex items-center gap-3 mb-4">
+                            <Package className="w-5 h-5 text-roblox-red" />
+                            <h3 className="font-gaming text-lg">COLLECTIBLES</h3>
+                          </div>
 
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                          {mockInventory.map((item) => (
-                            <div
-                              key={item.id}
-                              className="glass-card rounded-xl p-4 border border-roblox-red/20 transition-all duration-300 hover:scale-105 hover:border-roblox-red/40"
-                            >
-                              <div className="aspect-square rounded-lg bg-secondary/50 mb-3 flex items-center justify-center">
-                                <Package className="w-10 h-10 text-muted-foreground/30" />
-                              </div>
-                              <h4 className="font-medium text-sm mb-1 truncate">
-                                {item.name}
-                              </h4>
-                              <p className="text-xs text-muted-foreground mb-2">
-                                {item.type}
-                              </p>
-                              <div className="space-y-1">
-                                <p className="text-xs">
-                                  <span className="text-muted-foreground">RAP: </span>
-                                  <span className="text-roblox-red font-medium">
-                                    R${item.rap.toLocaleString()}
-                                  </span>
-                                </p>
-                                <p className="text-xs">
-                                  <span className="text-muted-foreground">Value: </span>
-                                  <span className="text-roblox-coral font-medium">
-                                    R${item.value.toLocaleString()}
-                                  </span>
+                          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                            {userData.inventory.map((item: any) => (
+                              <div
+                                key={item.userAssetId || item.assetId}
+                                className="glass-card rounded-xl p-3 border border-roblox-red/20 transition-all duration-300 hover:scale-105 hover:border-roblox-red/40"
+                              >
+                                <div className="aspect-square rounded-lg bg-secondary/50 mb-2 flex items-center justify-center">
+                                  <Package className="w-8 h-8 text-muted-foreground/30" />
+                                </div>
+                                <h4 className="font-medium text-xs mb-1 truncate">
+                                  {item.name}
+                                </h4>
+                                <p className="text-[10px] text-roblox-red font-medium">
+                                  RAP: R${formatNumber(item.recentAveragePrice || 0)}
                                 </p>
                               </div>
-                            </div>
-                          ))}
+                            ))}
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   </>
                 ) : (
@@ -271,7 +249,7 @@ const Roblox = () => {
                       NO USER SELECTED
                     </h3>
                     <p className="text-muted-foreground/70">
-                      Search for a user above to view their stats and inventory
+                      Search for a user above to view their real stats and inventory
                     </p>
                   </div>
                 )}
@@ -302,44 +280,56 @@ const Roblox = () => {
                     </button>
                   </form>
 
-                  {searchedGame ? (
+                  {isLoading ? (
+                    <div className="text-center py-16">
+                      <div className="w-12 h-12 border-4 border-roblox-red/30 border-t-roblox-red rounded-full animate-spin mx-auto mb-4" />
+                      <p className="text-muted-foreground">Loading game data...</p>
+                    </div>
+                  ) : gameData ? (
                     <div className="glass-card rounded-2xl p-6">
                       <div className="flex items-center gap-4 mb-6">
                         <div className="w-20 h-20 rounded-xl bg-gradient-roblox flex items-center justify-center">
                           <Gamepad2 className="w-10 h-10 text-white" />
                         </div>
                         <div>
-                          <h2 className="font-gaming text-2xl">{searchedGame}</h2>
+                          <h2 className="font-gaming text-2xl">{gameData.name}</h2>
                           <p className="text-muted-foreground">
-                            Created {mockGameStats.created} • Updated{" "}
-                            {mockGameStats.updated}
+                            by {gameData.creator?.name || "Unknown"} • Created{" "}
+                            {formatDate(gameData.created)}
                           </p>
                         </div>
                       </div>
 
+                      {gameData.description && (
+                        <p className="text-muted-foreground text-sm mb-6 max-w-2xl">
+                          {gameData.description.slice(0, 300)}
+                          {gameData.description.length > 300 ? "..." : ""}
+                        </p>
+                      )}
+
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <StatCard
                           label="Visits"
-                          value={mockGameStats.visits}
+                          value={formatNumber(gameData.visits)}
                           icon={Eye}
                           variant="roblox"
                         />
                         <StatCard
                           label="Playing Now"
-                          value={mockGameStats.playing}
+                          value={formatNumber(gameData.playing)}
                           icon={Users}
                           variant="roblox"
                         />
                         <StatCard
                           label="Favorites"
-                          value={mockGameStats.favorites}
+                          value={formatNumber(gameData.favoritedCount)}
                           icon={Star}
                           variant="roblox"
                         />
                         <StatCard
-                          label="Likes"
-                          value={mockGameStats.likes}
-                          icon={ThumbsUp}
+                          label="Max Players"
+                          value={gameData.maxPlayers}
+                          icon={Users}
                           variant="roblox"
                         />
                       </div>
@@ -351,7 +341,7 @@ const Roblox = () => {
                         SEARCH FOR A GAME
                       </h3>
                       <p className="text-muted-foreground/70">
-                        Enter a game name to view its analytics
+                        Enter a game name to view its real analytics
                       </p>
                     </div>
                   )}
@@ -365,50 +355,72 @@ const Roblox = () => {
                     <h2 className="font-gaming text-2xl">TRENDING GAMES</h2>
                   </div>
 
-                  <div className="grid gap-4">
-                    {mockPopularGames.map((game, index) => (
-                      <div
-                        key={game.id}
-                        className="glass-card rounded-xl p-4 flex items-center gap-4 transition-all duration-300 hover:scale-[1.02] hover:border-roblox-red/30 border border-transparent"
-                      >
-                        <div className="w-10 h-10 rounded-lg bg-gradient-roblox flex items-center justify-center font-gaming text-white">
-                          {index + 1}
-                        </div>
+                  {isPopularLoading ? (
+                    <div className="text-center py-16">
+                      <div className="w-12 h-12 border-4 border-roblox-red/30 border-t-roblox-red rounded-full animate-spin mx-auto mb-4" />
+                      <p className="text-muted-foreground">Loading popular games...</p>
+                    </div>
+                  ) : popularGames.length > 0 ? (
+                    <div className="grid gap-4">
+                      {popularGames.map((game: any, index: number) => (
+                        <div
+                          key={game.universeId || game.placeId || index}
+                          className="glass-card rounded-xl p-4 flex items-center gap-4 transition-all duration-300 hover:scale-[1.02] hover:border-roblox-red/30 border border-transparent"
+                        >
+                          <div className="w-10 h-10 rounded-lg bg-gradient-roblox flex items-center justify-center font-gaming text-white">
+                            {index + 1}
+                          </div>
 
-                        <div className="w-16 h-16 rounded-xl bg-secondary/50 flex items-center justify-center flex-shrink-0">
-                          <Gamepad2 className="w-8 h-8 text-muted-foreground/30" />
-                        </div>
+                          <div className="w-16 h-16 rounded-xl bg-secondary/50 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                            {game.imageToken ? (
+                              <img
+                                src={`https://thumbnails.roblox.com/v1/games/icons?universeIds=${game.universeId}&size=150x150&format=Png`}
+                                alt={game.name}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).style.display = "none";
+                                }}
+                              />
+                            ) : (
+                              <Gamepad2 className="w-8 h-8 text-muted-foreground/30" />
+                            )}
+                          </div>
 
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-gaming text-lg truncate">
-                            {game.name}
-                          </h3>
-                          <p className="text-sm text-muted-foreground">
-                            {game.genre}
-                          </p>
-                        </div>
-
-                        <div className="hidden md:flex items-center gap-6 text-sm">
-                          <div className="text-center">
-                            <p className="text-muted-foreground text-xs">Visits</p>
-                            <p className="font-gaming text-roblox-red">
-                              {game.visits}
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-gaming text-lg truncate">{game.name}</h3>
+                            <p className="text-sm text-muted-foreground">
+                              {game.gameDescription?.slice(0, 50) || ""}
                             </p>
                           </div>
-                          <div className="text-center">
-                            <p className="text-muted-foreground text-xs">Playing</p>
-                            <p className="font-gaming text-neon-green">
-                              {game.playing}
-                            </p>
-                          </div>
-                          <div className="text-center">
-                            <p className="text-muted-foreground text-xs">Likes</p>
-                            <p className="font-gaming">{game.likes}</p>
+
+                          <div className="hidden md:flex items-center gap-6 text-sm">
+                            <div className="text-center">
+                              <p className="text-muted-foreground text-xs">Playing</p>
+                              <p className="font-gaming text-neon-green">
+                                {formatNumber(game.playerCount || 0)}
+                              </p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-muted-foreground text-xs">Visits</p>
+                              <p className="font-gaming text-roblox-red">
+                                {formatNumber(game.totalUpVotes || 0)}
+                              </p>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-16">
+                      <Gamepad2 className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
+                      <h3 className="font-gaming text-xl text-muted-foreground mb-2">
+                        NO GAMES FOUND
+                      </h3>
+                      <p className="text-muted-foreground/70">
+                        Unable to load popular games at this time
+                      </p>
+                    </div>
+                  )}
                 </div>
               </TabsContent>
             </Tabs>
